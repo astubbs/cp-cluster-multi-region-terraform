@@ -85,6 +85,33 @@ resource "aws_security_group" "follower-cluster" {
 # resource "aws_security_group_rule" "follower-cluster-2" {}
 
 
+// Elastic IPS
+
+resource "aws_eip" "bastion-0" {
+  instance = "${aws_instance.euwest1-bastion.0.id}"
+  vpc      = true
+}
+
+resource "aws_eip" "broker-0" {
+  instance = "${aws_instance.euwest1-brokers.0.id}"
+  vpc      = true
+}
+
+resource "aws_eip" "broker-1" {
+  instance = "${aws_instance.euwest1-brokers.1.id}"
+  vpc      = true
+}
+
+resource "aws_eip" "zookeeper-0" {
+  instance = "${aws_instance.euwest1-zookeeper.0.id}"
+  vpc      = true
+}
+
+
+
+
+// Cluster Nodes
+
 resource "aws_instance" "euwest1-brokers" {
   count = 2
   ami           = "${var.ami}"
@@ -125,6 +152,8 @@ resource "aws_instance" "euwest1-zookeeper" {
   }
 }
 
+
+// Output
 
 output "public_ips" {
   value = ["${aws_instance.euwest1-brokers.*.public_ip}"]
