@@ -93,7 +93,6 @@ resource "aws_security_group" "follower-cluster" {
       from_port = 0
       to_port = 0
       protocol = "-1"
-      # security_groups = ["sg-5f10dd36"] //(bastion-london)
       self = true
       cidr_blocks = ["54.154.77.0/24"]
   }
@@ -108,12 +107,18 @@ resource "aws_security_group" "follower-cluster" {
 
   # ssh
   ingress {
-      from_port = 0
+      from_port = 22
       to_port = 22
       protocol = "TCP"
       cidr_blocks = ["${var.myip}"]
-      //security_groups = ["sg-5f10dd36"] //(bastion-london)
-      //cidr_blocks = ["54.154.77.0/24"]
+  }
+
+  # from bastion
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      security_groups = ["${aws_security_group.bastions.id}"] 
   }
 
   egress {
@@ -121,7 +126,6 @@ resource "aws_security_group" "follower-cluster" {
       to_port = 0
       protocol = "-1"
       cidr_blocks = ["0.0.0.0/0"]
-      # prefix_list_ids = ["pl-12c4e678"]
   }
 }
 
@@ -130,7 +134,7 @@ resource "aws_security_group" "follower-cluster" {
 
 // Elastic IPS
 
-resource "aws_eip" "bastion-0" {
+resource "aws_eip" "bastion" {
   instance = "${aws_instance.euwest1-bastion.0.id}"
   vpc      = true
 }
@@ -164,9 +168,12 @@ resource "aws_instance" "euwest1-brokers" {
   key_name = "${var.key_name}"
   tags {
 	  Name = "as-k-${count.index}-${element(var.azs, count.index)}"
+    nice-name = "kafka-${count.index}"
+    big-nice-name = "follower-kafka-${count.index}"
 	  Role = "broker"
   	Owner = "${var.owner}"
     sshUser = "ubuntu"
+    ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
   }
 }
@@ -180,9 +187,12 @@ resource "aws_instance" "euwest1-bastion" {
   key_name = "${var.key_name}"
   tags {
 	  Name = "as-b-${count.index}-${element(var.azs, count.index)}"
+    nice-name = "bastion-0"
+    big-nice-name = "bastion-0"
 	  Role = "bastion"
   	Owner = "${var.owner}"
     sshUser = "ubuntu"
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
@@ -195,12 +205,17 @@ resource "aws_instance" "euwest1-zookeeper" {
   key_name = "${var.key_name}"
   tags {
 	  Name = "as-zk-${count.index}-${element(var.azs, count.index)}"
+    nice-name = "zk-${count.index}"
+    big-nice-name = "follower-zk-${count.index}"
 	  Role = "zookeeper"
   	Owner = "${var.owner}"
     sshUser = "ubuntu"
+    ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
+
+// Lead cluster
 
 
 // Output
@@ -211,9 +226,6 @@ output "public_ips" {
 output "public_dns" {
   value = ["${aws_instance.euwest1-brokers.*.public_dns}"]
 }
-output "security_groups" {
-  value = ["${aws_instance.euwest1-brokers.*.security_groups}"]
-}
-output "first_ip" {
-  value = ["${aws_instance.euwest1-brokers.0.public_ip}"]
+output "bastion_ip" {
+  value = ["${aws_instance.euwest1-bastion.public_ip}"]
 }
