@@ -3,8 +3,6 @@
 #   secret_key =
 #   region     = "eu-west-2"
 # }
-
-
 variable "my-region" {
   default = "eu-west-2"
 }
@@ -158,7 +156,6 @@ resource "aws_eip" "zookeeper-0" {
 
 
 // Cluster Nodes
-
 resource "aws_instance" "euwest1-brokers" {
   count = 2
   ami           = "${var.ami}"
@@ -216,7 +213,11 @@ resource "aws_instance" "euwest1-zookeeper" {
 
 
 // Lead cluster
-
+module "leader-cluster" {
+    source = "./confluent"
+    b-count = 3
+    name = "lead"
+}
 
 // Output
 
