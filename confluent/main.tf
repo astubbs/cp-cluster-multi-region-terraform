@@ -94,7 +94,8 @@ resource "aws_security_group" "ssh" {
     from_port = 8
     to_port = 0
     protocol = "icmp"
-    cidr_blocks = ["${var.myip}"]
+    cidr_blocks = ["0.0.0.0/0"]
+    #cidr_blocks = ["${var.myip}"]
   }
 
   # ssh
@@ -148,7 +149,8 @@ resource "aws_security_group" "brokers" {
     from_port = 8
     to_port = 0
     protocol = "icmp"
-    cidr_blocks = ["${var.myip}"]
+    cidr_blocks = ["0.0.0.0/0"]
+    #cidr_blocks = ["${var.myip}"]
   }
 
   # ssh
@@ -175,6 +177,39 @@ resource "aws_security_group" "brokers" {
       self = true
       cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "zookeepers" {
+  description = "Zookeeper server - Managed by Terraform"
+  name = "${var.ownershort}-zookeepers"
+
+  ingress {
+      from_port = 2181
+      to_port = 2181
+      protocol = "TCP"
+      security_groups = ["${aws_security_group.brokers.id}"] 
+  }
+
+  # ingress {
+  #     from_port = 2888
+  #     to_port = 2888
+  #     protocol = "TCP"
+  #     security_groups = ["${aws_security_group.zookeepers.id}"] 
+  # }
+
+  # ingress {
+  #     from_port = 3888
+  #     to_port = 3888
+  #     protocol = "TCP"
+  #     security_groups = ["${aws_security_group.zookeepers.id}"] 
+  # }
 
   egress {
       from_port = 0
@@ -248,6 +283,7 @@ resource "aws_instance" "brokers" {
     createdBy = "terraform"
     # ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
+    region = "${var.region}"
   }
 }
 
@@ -256,14 +292,16 @@ resource "aws_instance" "zookeeper" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
-  security_groups = ["${aws_security_group.ssh.name}"]
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.zookeepers.name}"]
   key_name = "${var.key_name}"
   tags {
     Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
     description = "zookeeper nodes - Managed by Terraform"
     role = "zookeeper"
+    zookeeperid = "${count.index}"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
+    region = "${var.region}"
   }
 }
 
@@ -280,6 +318,7 @@ resource "aws_instance" "connect-cluster" {
     role = "connect"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
+    region = "${var.region}"
   }
 }
 
