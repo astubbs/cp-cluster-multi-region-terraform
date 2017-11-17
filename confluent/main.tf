@@ -1,19 +1,43 @@
-variable "b-count" {}
-
 variable "name" {}
-variable "role" {}
 
-variable "my-region" {
-  default = "eu-west-2"
+variable "region" {}
+variable "owner" {}
+variable "ownershort" {}
+
+variable "zk_count" {
+  default = 1
+}
+variable "b_count" {
+  default = 1
 }
 
-variable "owner" {
-  default = "astubbs"
+provider "aws" {
+  region = "${var.region}"
 }
 
-variable "ami" {
-  default = "ami-57eae033"
+variable "key_name" {}
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
 }
+
+# variable "ami" {
+#   # default = "ami-57eae033" # us-west-2 ubuntu
+#   # default = "ami-960316f2"
+#   default = "${data.aws_ami.ubuntu.id}"
+# }
 
 variable "instance_type" {
   default = "t2.medium"
@@ -22,32 +46,146 @@ variable "instance_type" {
 variable "azs" {
   description = "Run the EC2 Instances in these Availability Zones"
   type = "list"
-  default = ["eu-west-2a", "eu-west-2b"]
 }
 
-variable "myip" { default = "90.207.16.137/32" }
+variable "myip" { default = "217.138.75.100/32" }
 
-variable "key_name" {
-  default = "tony-follower-cluster-london"
+
+resource "aws_security_group" "bastions" {
+  name = "${var.ownershort}-bastions"
+  # description = "follower-cluster - Managed by Terraform"
+  # description = "follower-cluster"
+
+  # Allow ping from anywhere
+  ingress {
+    from_port = 8
+    to_port = 0
+    protocol = "icmp"
+    cidr_blocks = ["${var.myip}"]
+  }
+
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      self = true
+      # cidr_blocks = ["${var.myip}"]
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
-variable "security_group" {
-  default = "tony-follower-cluster-london"
+
+resource "aws_security_group" "brokers" {
+  description = "brokers - Managed by Terraform"
+  name = "${var.ownershort}-brokers"
+
+   # cluster
+  ingress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      self = true
+      cidr_blocks = ["54.154.77.0/24"]
+  }
+
+  # Allow ping from anywhere
+  ingress {
+    from_port = 8
+    to_port = 0
+    protocol = "icmp"
+    cidr_blocks = ["${var.myip}"]
+  }
+
+  # ssh
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      cidr_blocks = ["${var.myip}"]
+  }
+
+  # from bastion
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      security_groups = ["${aws_security_group.bastions.id}"] 
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
 }
+
+# resource "aws_eip" "bastion" {
+#   instance = "${aws_instance.euwest1-bastion.0.id}"
+#   vpc      = true
+# }
+
+# resource "aws_eip" "broker-0" {
+#   instance = "${aws_instance.euwest1-brokers.0.id}"
+#   vpc      = true
+# }
+
+# # resource "aws_eip" "broker-1" {
+# #   instance = "${aws_instance.euwest1-brokers.1.id}"
+# #   vpc      = true
+# # }
+
+# resource "aws_eip" "zookeeper-0" {
+#   instance = "${aws_instance.euwest1-zookeeper.0.id}"
+#   vpc      = true
+# }
+
+
+
+
+
+resource "aws_instance" "bastion" {
+  count = 1
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "t2.micro"
+  availability_zone = "${element(var.azs, 0)}"
+  security_groups = ["${aws_security_group.bastions.name}"]
+  key_name = "${var.key_name}"
+  tags {
+    Name = "${var.ownershort}-bastion-${count.index}-${element(var.azs, count.index)}"
+    description = "bastion node - Managed by Terraform"
+    nice-name = "bastion-0"
+    big-nice-name = "bastion-0"
+    role = "bastion"
+    owner = "${var.owner}"
+    sshUser = "ubuntu"
+    # ansible_python_interpreter = "/usr/bin/python3"
+  }
+}
+
 
 resource "aws_instance" "brokers" {
-  count = "${var.b-count}"
-  ami           = "${var.ami}"
+  count         = "${var.b_count}"
+  ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
-  security_groups = ["${var.security_group}"]
+  # security_groups = ["${var.security_group}"]
+  security_groups = ["${aws_security_group.brokers.name}"]
   key_name = "${var.key_name}"
 
   tags {
-    Name = "${var.name}-k-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
+    description = "broker nodes - Managed by Terraform"
     nice-name = "kafka-${count.index}"
     big-nice-name = "follower-kafka-${count.index}"
-    role = "${var.role}"
+    role = "broker"
     owner = "${var.owner}"
     sshUser = "ubuntu"
     sshPrivateIp = true
@@ -55,4 +193,27 @@ resource "aws_instance" "brokers" {
     # ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
   }
+}
+
+resource "aws_instance" "euwest1-zookeeper" {
+  count         = "${var.zk_count}"
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${var.instance_type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  tags {
+    Name = "as-zookeeper-${count.index}-${element(var.azs, count.index)}"
+    Role = "zookeeper"
+      Owner = "${var.owner}"
+  }
+}
+
+// Output
+output "public_ips" {
+  value = ["${aws_instance.brokers.*.public_ip}"]
+}
+output "public_dns" {
+  value = ["${aws_instance.brokers.*.public_dns}"]
+}
+output "bastion_ip" {
+  value = ["${aws_instance.bastion.public_dns}"]
 }
