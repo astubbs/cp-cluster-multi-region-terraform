@@ -4,12 +4,16 @@ variable "region" {}
 variable "owner" {}
 variable "ownershort" {}
 
-variable "zk_count" {
+variable "zk-count" {
   default = 1
 }
-variable "b_count" {
+variable "broker-count" {
   default = 1
 }
+variable "connect-count" {
+  default = 1
+}
+
 
 provider "aws" {
   region = "${var.region}"
@@ -170,9 +174,8 @@ resource "aws_instance" "bastion" {
   }
 }
 
-
 resource "aws_instance" "brokers" {
-  count         = "${var.b_count}"
+  count         = "${var.broker-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
@@ -195,17 +198,32 @@ resource "aws_instance" "brokers" {
   }
 }
 
-resource "aws_instance" "euwest1-zookeeper" {
-  count         = "${var.zk_count}"
+resource "aws_instance" "zookeeper" {
+  count         = "${var.zk-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   tags {
-    Name = "as-zookeeper-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
+    description = "zookeeper nodes - Managed by Terraform"
     Role = "zookeeper"
       Owner = "${var.owner}"
   }
 }
+
+resource "aws_instance" "connect-cluster" {
+  count         = "${var.connect-count}"
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${var.instance_type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  tags {
+    Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
+    description = "Connect nodes - Managed by Terraform"
+    Role = "connect"
+      Owner = "${var.owner}"
+  }
+}
+
 
 // Output
 output "public_ips" {

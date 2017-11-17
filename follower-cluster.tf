@@ -233,7 +233,7 @@ variable "myip" { default = "90.207.16.137/32" }
 // frankfurt
 module "frankfurt-cluster" {
     source = "./confluent"
-    b_count = 1
+    broker-count = 1
     name = "frankfurt-cluster"
     region = "eu-central-1"
     azs = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
@@ -246,7 +246,7 @@ module "frankfurt-cluster" {
 // ireland
 module "ireland-cluster" {
     source = "./confluent"
-    b_count = 1
+    broker-count = 1
     name = "frankfurt-cluster"
     region = "eu-west-1"
     azs = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
