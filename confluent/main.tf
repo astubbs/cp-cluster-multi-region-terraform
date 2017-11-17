@@ -85,6 +85,50 @@ resource "aws_security_group" "bastions" {
   }
 }
 
+resource "aws_security_group" "ssh" {
+  description = "Managed by Terraform"
+  name = "${var.ownershort}-ssh"
+
+  # Allow ping from anywhere
+  ingress {
+    from_port = 8
+    to_port = 0
+    protocol = "icmp"
+    cidr_blocks = ["${var.myip}"]
+  }
+
+  # ssh
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      cidr_blocks = ["${var.myip}"]
+  }
+
+  # from bastion
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      security_groups = ["${aws_security_group.bastions.id}"] 
+  }
+
+  # ssh from anywhere
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
 resource "aws_security_group" "brokers" {
   description = "brokers - Managed by Terraform"
@@ -189,9 +233,8 @@ resource "aws_instance" "brokers" {
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   # security_groups = ["${var.security_group}"]
-  security_groups = ["${aws_security_group.brokers.name}"]
+  security_groups = ["${aws_security_group.brokers.name}", "${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
-
   tags {
     Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
     description = "broker nodes - Managed by Terraform"
@@ -212,11 +255,14 @@ resource "aws_instance" "zookeeper" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}"]
+  key_name = "${var.key_name}"
   tags {
     Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
     description = "zookeeper nodes - Managed by Terraform"
     Role = "zookeeper"
-      Owner = "${var.owner}"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
   }
 }
 
@@ -225,11 +271,14 @@ resource "aws_instance" "connect-cluster" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}"]
+  key_name = "${var.key_name}"
   tags {
     Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
     description = "Connect nodes - Managed by Terraform"
     Role = "connect"
-      Owner = "${var.owner}"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
   }
 }
 
