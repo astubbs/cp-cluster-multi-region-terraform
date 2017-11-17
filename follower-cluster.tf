@@ -1,8 +1,11 @@
-# provider "aws" {
-#   access_key =
-#   secret_key =
-#   region     = "eu-west-2"
-# }
+# EU (Ireland)  eu-west-1
+# EU (London) eu-west-2
+
+provider "aws" {
+ region     = "eu-west-2"
+}
+
+
 variable "my-region" {
   default = "eu-west-2"
 }
@@ -12,7 +15,8 @@ variable "owner" {
 }
 
 variable "ami" {
-  default = "ami-57eae033"
+  # default = "ami-57eae033" # us-west-2 ubuntu
+  default = "ami-960316f2"
 }
 
 variable "instance_type" {
@@ -66,10 +70,12 @@ resource "aws_security_group" "bastions" {
   }
 
   ingress {
-      from_port = 0
+      from_port = 22
       to_port = 22
       protocol = "TCP"
-      cidr_blocks = ["${var.myip}"]
+      self = true
+      # cidr_blocks = ["${var.myip}"]
+      cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -77,7 +83,6 @@ resource "aws_security_group" "bastions" {
       to_port = 0
       protocol = "-1"
       cidr_blocks = ["0.0.0.0/0"]
-      # prefix_list_ids = ["pl-12c4e678"]
   }
 }
 
@@ -85,6 +90,62 @@ resource "aws_security_group" "bastions" {
 resource "aws_security_group" "follower-cluster" {
   # description = "follower-cluster - Managed by Terraform"
   name = "follower-cluster"
+
+  # all
+  # ingress {
+  #     from_port = 0
+  #     to_port = 0
+  #     protocol = "-1"
+  #     cidr_blocks = ["0.0.0.0/0"]
+  # }
+
+  # cluster
+  ingress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      self = true
+      cidr_blocks = ["54.154.77.0/24"]
+  }
+
+  # Allow ping from anywhere
+  ingress {
+    from_port = 8
+    to_port = 0
+    protocol = "icmp"
+    cidr_blocks = ["${var.myip}"]
+  }
+
+  # ssh
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      cidr_blocks = ["${var.myip}"]
+  }
+
+  # from bastion
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      security_groups = ["${aws_security_group.bastions.id}"] 
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+
+
+resource "aws_security_group" "lead-cluster" {
+  # description = "follower-cluster - Managed by Terraform"
+  name = "lead-cluster"
 
    # cluster
   ingress {
@@ -142,10 +203,10 @@ resource "aws_eip" "broker-0" {
   vpc      = true
 }
 
-resource "aws_eip" "broker-1" {
-  instance = "${aws_instance.euwest1-brokers.1.id}"
-  vpc      = true
-}
+# resource "aws_eip" "broker-1" {
+#   instance = "${aws_instance.euwest1-brokers.1.id}"
+#   vpc      = true
+# }
 
 resource "aws_eip" "zookeeper-0" {
   instance = "${aws_instance.euwest1-zookeeper.0.id}"
@@ -167,10 +228,11 @@ resource "aws_instance" "euwest1-brokers" {
 	  Name = "as-k-${count.index}-${element(var.azs, count.index)}"
     nice-name = "kafka-${count.index}"
     big-nice-name = "follower-kafka-${count.index}"
-	  Role = "broker"
-  	Owner = "${var.owner}"
+	  role = "broker"
+  	owner = "${var.owner}"
     sshUser = "ubuntu"
-    ansible_python_interpreter = "/usr/bin/python3"
+    # ansible_python_interpreter = "/usr/bin/python3"
+    sshPrivateIp = true
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
   }
 }
@@ -183,13 +245,21 @@ resource "aws_instance" "euwest1-bastion" {
   security_groups = ["${aws_security_group.bastions.name}"]
   key_name = "${var.key_name}"
   tags {
-	  Name = "as-b-${count.index}-${element(var.azs, count.index)}"
+    Name = "as-b-${count.index}-${element(var.azs, count.index)}"
     nice-name = "bastion-0"
     big-nice-name = "bastion-0"
-	  Role = "bastion"
-  	Owner = "${var.owner}"
+    role = "bastion"
+    owner = "${var.owner}"
     sshUser = "ubuntu"
-    ansible_python_interpreter = "/usr/bin/python3"
+    # ansible_python_interpreter = "/usr/bin/python3"
+  }
+  provisioner "file" {
+      source = "/Users/antony/Documents/aws-cluster-demo/ansible-playbooks"
+      destination = "./ansible-playbooks"
+      connection {
+        type = "ssh"
+        user = "ubuntu"
+    }
   }
 }
 
@@ -204,10 +274,11 @@ resource "aws_instance" "euwest1-zookeeper" {
 	  Name = "as-zk-${count.index}-${element(var.azs, count.index)}"
     nice-name = "zk-${count.index}"
     big-nice-name = "follower-zk-${count.index}"
-	  Role = "zookeeper"
-  	Owner = "${var.owner}"
+	  role = "zookeeper"
+  	owner = "${var.owner}"
     sshUser = "ubuntu"
-    ansible_python_interpreter = "/usr/bin/python3"
+    sshPrivateIp = true
+    # ansible_python_interpreter = "/usr/bin/python3"
   }
 }
 
@@ -216,8 +287,20 @@ resource "aws_instance" "euwest1-zookeeper" {
 module "leader-cluster" {
     source = "./confluent"
     b-count = 3
-    name = "lead"
+    name = "leader-cluster"
+    role = "broker"
+    security_group = "${aws_security_group.lead-cluster.name}"
 }
+
+// zk
+module "leader-zk-cluster" {
+    source = "./confluent"
+    b-count = 3
+    name = "zk-cluster"
+    role = "zookeeper"
+    security_group = "${aws_security_group.lead-cluster.name}"
+}
+
 
 // Output
 
@@ -228,5 +311,5 @@ output "public_dns" {
   value = ["${aws_instance.euwest1-brokers.*.public_dns}"]
 }
 output "bastion_ip" {
-  value = ["${aws_instance.euwest1-bastion.public_ip}"]
+  value = ["${aws_instance.euwest1-bastion.public_dns}"]
 }
