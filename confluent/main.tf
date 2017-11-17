@@ -26,7 +26,7 @@ data "aws_ami" "ubuntu" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-*"]
   }
 
   filter {
@@ -240,6 +240,7 @@ resource "aws_instance" "brokers" {
     description = "broker nodes - Managed by Terraform"
     nice-name = "kafka-${count.index}"
     big-nice-name = "follower-kafka-${count.index}"
+    brokerid = "${count.index}"
     role = "broker"
     owner = "${var.owner}"
     sshUser = "ubuntu"
@@ -260,7 +261,7 @@ resource "aws_instance" "zookeeper" {
   tags {
     Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
     description = "zookeeper nodes - Managed by Terraform"
-    Role = "zookeeper"
+    role = "zookeeper"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
   }
@@ -276,7 +277,7 @@ resource "aws_instance" "connect-cluster" {
   tags {
     Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
     description = "Connect nodes - Managed by Terraform"
-    Role = "connect"
+    role = "connect"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
   }
