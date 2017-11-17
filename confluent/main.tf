@@ -163,7 +163,7 @@ resource "aws_instance" "bastion" {
   security_groups = ["${aws_security_group.bastions.name}"]
   key_name = "${var.key_name}"
   tags {
-    Name = "${var.ownershort}-bastion-${count.index}"
+    Name = "${var.ownershort}-bastion-${count.index}-${element(var.azs, count.index)}"
     description = "bastion node - Managed by Terraform"
     nice-name = "bastion-0"
     big-nice-name = "bastion-0"
@@ -184,14 +184,14 @@ resource "aws_instance" "brokers" {
   key_name = "${var.key_name}"
 
   tags {
-    Name = "${var.ownershort}-broker-${count.index}"
+    Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
     description = "broker nodes - Managed by Terraform"
     nice-name = "kafka-${count.index}"
     big-nice-name = "follower-kafka-${count.index}"
     role = "broker"
     owner = "${var.owner}"
     sshUser = "ubuntu"
-    sshPrivateIp = true
+    sshPrivateIp = false
     createdBy = "terraform"
     # ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
@@ -204,7 +204,7 @@ resource "aws_instance" "zookeeper" {
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   tags {
-    Name = "${var.ownershort}-zookeeper-${count.index}"
+    Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
     description = "zookeeper nodes - Managed by Terraform"
     Role = "zookeeper"
       Owner = "${var.owner}"
@@ -217,7 +217,7 @@ resource "aws_instance" "connect-cluster" {
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   tags {
-    Name = "${var.ownershort}-connect-${count.index}"
+    Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
     description = "Connect nodes - Managed by Terraform"
     Role = "connect"
       Owner = "${var.owner}"
