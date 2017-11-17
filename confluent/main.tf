@@ -141,7 +141,15 @@ resource "aws_security_group" "brokers" {
       to_port = 0
       protocol = "-1"
       self = true
-      cidr_blocks = ["54.154.77.0/24"]
+  }
+
+  # client connections
+  ingress {
+      from_port = 9092
+      to_port = 9092
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["0.0.0.0/0"]
   }
 
   # Allow ping from anywhere
@@ -187,7 +195,7 @@ resource "aws_security_group" "brokers" {
 }
 
 resource "aws_security_group" "zookeepers" {
-  description = "Zookeeper server - Managed by Terraform"
+  description = "Zookeeper security group - Managed by Terraform"
   name = "${var.ownershort}-zookeepers"
 
   ingress {
@@ -197,19 +205,61 @@ resource "aws_security_group" "zookeepers" {
       security_groups = ["${aws_security_group.brokers.id}"] 
   }
 
-  # ingress {
-  #     from_port = 2888
-  #     to_port = 2888
-  #     protocol = "TCP"
-  #     security_groups = ["${aws_security_group.zookeepers.id}"] 
-  # }
+  ingress {
+      from_port = 2888
+      to_port = 2888
+      protocol = "TCP"
+      self = true
+  }
 
-  # ingress {
-  #     from_port = 3888
-  #     to_port = 3888
-  #     protocol = "TCP"
-  #     security_groups = ["${aws_security_group.zookeepers.id}"] 
-  # }
+  ingress {
+      from_port = 3888
+      to_port = 3888
+      protocol = "TCP"
+      self = true
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+resource "aws_security_group" "c3" {
+  description = "C3 security group - Managed by Terraform"
+  name = "${var.ownershort}-c3"
+
+  # web ui
+  ingress {
+      from_port = 9021
+      to_port = 9021
+      protocol = "TCP"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+resource "aws_security_group" "connect" {
+  description = "Connect security group - Managed by Terraform"
+  name = "${var.ownershort}-connect"
+
+  # connect http interface
+  ingress {
+      from_port = 9092
+      to_port = 9092
+      protocol = "TCP"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
       from_port = 0
@@ -220,27 +270,19 @@ resource "aws_security_group" "zookeepers" {
 }
 
 # resource "aws_eip" "bastion" {
-#   instance = "${aws_instance.euwest1-bastion.0.id}"
+#   instance = "${aws_instance.bastion.0.id}"
 #   vpc      = true
 # }
 
 # resource "aws_eip" "broker-0" {
-#   instance = "${aws_instance.euwest1-brokers.0.id}"
+#   instance = "${aws_instance.brokers.0.id}"
 #   vpc      = true
 # }
-
-# # resource "aws_eip" "broker-1" {
-# #   instance = "${aws_instance.euwest1-brokers.1.id}"
-# #   vpc      = true
-# # }
 
 # resource "aws_eip" "zookeeper-0" {
-#   instance = "${aws_instance.euwest1-zookeeper.0.id}"
+#   instance = "${aws_instance.zookeeper.0.id}"
 #   vpc      = true
 # }
-
-
-
 
 
 resource "aws_instance" "bastion" {
@@ -310,12 +352,29 @@ resource "aws_instance" "connect-cluster" {
   ami           = "${data.aws_ami.ubuntu.id}"
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
-  security_groups = ["${aws_security_group.ssh.name}"]
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.connect.name}"]
   key_name = "${var.key_name}"
   tags {
     Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
     description = "Connect nodes - Managed by Terraform"
     role = "connect"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+  }
+}
+
+resource "aws_instance" "control-center" {
+  count         = 1
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${var.instance_type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.c3.name}"]
+  key_name = "${var.key_name}"
+  tags {
+    Name = "${var.ownershort}-c3-${count.index}-${element(var.azs, count.index)}"
+    description = "Control Center - Managed by Terraform"
+    role = "c3"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
