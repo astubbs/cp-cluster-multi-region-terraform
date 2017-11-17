@@ -163,7 +163,7 @@ resource "aws_instance" "bastion" {
   security_groups = ["${aws_security_group.bastions.name}"]
   key_name = "${var.key_name}"
   tags {
-    Name = "${var.ownershort}-bastion-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-bastion-${count.index}"
     description = "bastion node - Managed by Terraform"
     nice-name = "bastion-0"
     big-nice-name = "bastion-0"
@@ -184,7 +184,7 @@ resource "aws_instance" "brokers" {
   key_name = "${var.key_name}"
 
   tags {
-    Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-broker-${count.index}"
     description = "broker nodes - Managed by Terraform"
     nice-name = "kafka-${count.index}"
     big-nice-name = "follower-kafka-${count.index}"
@@ -204,7 +204,7 @@ resource "aws_instance" "zookeeper" {
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   tags {
-    Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-zookeeper-${count.index}"
     description = "zookeeper nodes - Managed by Terraform"
     Role = "zookeeper"
       Owner = "${var.owner}"
@@ -217,7 +217,7 @@ resource "aws_instance" "connect-cluster" {
   instance_type = "${var.instance_type}"
   availability_zone = "${element(var.azs, count.index)}"
   tags {
-    Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
+    Name = "${var.ownershort}-connect-${count.index}"
     description = "Connect nodes - Managed by Terraform"
     Role = "connect"
       Owner = "${var.owner}"
