@@ -123,6 +123,15 @@ resource "aws_security_group" "brokers" {
       security_groups = ["${aws_security_group.bastions.id}"] 
   }
 
+  # ssh from anywhere
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
       from_port = 0
       to_port = 0
@@ -191,7 +200,7 @@ resource "aws_instance" "brokers" {
     role = "broker"
     owner = "${var.owner}"
     sshUser = "ubuntu"
-    sshPrivateIp = false
+    # sshPrivateIp = true // this is only checked for existence, not if it's true or false by terraform.py (ati)
     createdBy = "terraform"
     # ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
