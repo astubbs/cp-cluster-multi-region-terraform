@@ -48,11 +48,13 @@ data "aws_ami" "ubuntu" {
 
 # moderatly high performance images
 locals {
-  zk-instance-type = "i3.large" #I3 High I/O Large i3.large  15.25 GiB 2 vCPUs 475 GiB NVMe SSD  Up to 10 Gigabit  $0.172000 hourly
-  connect-instance-type = "c5.2xlarge" #Up to 10 Gpbs 32.0 GiB 16 vCPUs
-  broker-instance-type = "r4.2xlarge" #61.0 GiB  8 vCPUs EBS only  Up to 10 Gigabit $0.593000 hourly
-  c3-instance-type = "i3.4xlarge"  #122.0 GiB 16 vCPUs  3800 GiB (2 * 1900 GiB NVMe SSD)  Up to 10 Gigabit  $1.376000 hourly
-  clients-instance-type = "r4.large" #R4 High-Memory Large  r4.large  15.25 GiB 2 vCPUs EBS only  Up to 10 Gigabit  $0.148000 hourly
+  zk-instance-type = "i3.large" # I3 High I/O Large i3.large  15.25 GiB 2 vCPUs 475 GiB NVMe SSD  Up to 10 Gigabit  $0.172000 hourly
+  # c5.2xlarge not available in c4
+  # connect-instance-type = "c5.2xlarge" # C5 High-CPU Double Extra Large c5.2xlarge  16.0 GiB  8 vCPUs EBS only  Up to 10 Gbps $0.384000 hourly\
+  connect-instance-type = "c4.2xlarge"  # C4 High-CPU Double Extra Large c4.2xlarge  15.0 GiB  8 vCPUs EBS only  High  $0.454000 hourly
+  broker-instance-type = "r4.2xlarge" # 61.0 GiB  8 vCPUs EBS only  Up to 10 Gigabit $0.593000 hourly
+  c3-instance-type = "i3.4xlarge"  # 122.0 GiB 16 vCPUs  3800 GiB (2 * 1900 GiB NVMe SSD)  Up to 10 Gigabit  $1.376000 hourly
+  client-instance-type = "r4.large" # R4 High-Memory Large  r4.large  15.25 GiB 2 vCPUs EBS only  Up to 10 Gigabit  $0.148000 hourly
 }
 
 variable "azs" {
@@ -301,13 +303,13 @@ resource "aws_instance" "bastion" {
 resource "aws_instance" "brokers" {
   count         = "${var.broker-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.broker-instance-type}"
+  instance_type = "${local.broker-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   # security_groups = ["${var.security_group}"]
   security_groups = ["${aws_security_group.brokers.name}", "${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
   root_block_device {
-    volume_size = 1000
+    volume_size = 1000 # 1TB
   }
   tags {
     Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
@@ -329,7 +331,7 @@ resource "aws_instance" "brokers" {
 resource "aws_instance" "zookeeper" {
   count         = "${var.zk-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.zk-instance-type}"
+  instance_type = "${local.zk-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.zookeepers.name}"]
   key_name = "${var.key_name}"
@@ -347,7 +349,7 @@ resource "aws_instance" "zookeeper" {
 resource "aws_instance" "connect-cluster" {
   count         = "${var.connect-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.connect-instance-type}"
+  instance_type = "${local.connect-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.connect.name}"]
   key_name = "${var.key_name}"
@@ -364,10 +366,13 @@ resource "aws_instance" "connect-cluster" {
 resource "aws_instance" "control-center" {
   count         = 1
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.c3-instance-type}"
+  instance_type = "${local.c3-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.c3.name}"]
   key_name = "${var.key_name}"
+  root_block_device {
+    volume_size = 300 # 300 GB
+  }
   tags {
     Name = "${var.ownershort}-c3-${count.index}-${element(var.azs, count.index)}"
     description = "Control Center - Managed by Terraform"
@@ -402,7 +407,7 @@ variable "client-instance-type" {
 resource "aws_instance" "performance-producer" {
   count         = "${var.producer-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.client-instance-type}"
+  instance_type = "${local.client-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
@@ -424,7 +429,7 @@ variable "consumer-instance-type" {
 resource "aws_instance" "performance-consumer" {
   count         = "${var.consumer-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${locals.client-instance-type}"
+  instance_type = "${local.client-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"

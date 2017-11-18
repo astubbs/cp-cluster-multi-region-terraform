@@ -228,24 +228,29 @@ variable "myip" { }
 #   }
 # }
 
-# module "frankfurt-cluster" {
-#     source = "./confluent"
-#     broker-count = 10
-#     zk-count = 3
-#     connect-count = 2
-#     name = "frankfurt-cluster"
-#     region = "eu-central-1"
-#     azs = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
-#     owner = "${var.owner}"
-#     ownershort = "${var.ownershort}"
-#     key_name = "antony-frankfurt"
-# }
+module "frankfurt-cluster" {
+    source = "./confluent"
+    broker-count = 5
+    zk-count = 3
+    connect-count = 2
+    producer-count = 0
+    consumer-count = 2
+    name = "frankfurt-cluster"
+    region = "eu-central-1"
+    azs = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
+    owner = "${var.owner}"
+    ownershort = "${var.ownershort}"
+    key_name = "antony-frankfurt"
+    myip = "${var.myip}"
+}
 
 module "ireland-cluster" {
     source = "./confluent"
     broker-count = 5
     zk-count = 3
-    connect-count = 2
+    connect-count = 0
+    producer-count = 2
+    consumer-count = 0
     name = "frankfurt-cluster"
     region = "eu-west-1"
     azs = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
