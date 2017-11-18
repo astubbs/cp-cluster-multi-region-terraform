@@ -172,7 +172,7 @@ resource "aws_security_group" "brokers" {
       protocol = "TCP"
       self = true
       cidr_blocks = ["${local.myip-cidr}"]
-      security_groups = ["${aws_security_group.ssh.id}"] # should an explicit group for clients, ssh covers it
+      security_groups = ["${aws_security_group.ssh.id}", "${aws_security_group.connect.id}"] # should an explicit group for clients, ssh covers it
   }
 
   # Allow ping from anywhere
@@ -259,12 +259,14 @@ resource "aws_security_group" "connect" {
   description = "Connect security group - Managed by Terraform"
   name = "${var.ownershort}-connect"
 
-  # connect http interface
+  # connect http interface - only accessable on host, without this
+  # c3 needs access
   ingress {
-      from_port = 9092
-      to_port = 9092
+      from_port = 8083
+      to_port = 8083
       protocol = "TCP"
       cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.c3.id}"] 
   }
 
   egress {
