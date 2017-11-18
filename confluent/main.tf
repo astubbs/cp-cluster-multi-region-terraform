@@ -1,5 +1,4 @@
 variable "name" {}
-
 variable "region" {}
 variable "owner" {}
 variable "ownershort" {}
@@ -43,8 +42,17 @@ data "aws_ami" "ubuntu" {
 #   default = "${data.aws_ami.ubuntu.id}"
 # }
 
-variable "instance_type" {
-  default = "t2.medium"
+# variable "instance_type" {
+#   default = "t2.medium"
+# }
+
+# moderatly high performance images
+locals {
+  zk-instance-type = "i3.large" #I3 High I/O Large i3.large  15.25 GiB 2 vCPUs 475 GiB NVMe SSD  Up to 10 Gigabit  $0.172000 hourly
+  connect-instance-type = "c5.2xlarge" #Up to 10 Gpbs 32.0 GiB 16 vCPUs
+  broker-instance-type = "r4.2xlarge" #61.0 GiB  8 vCPUs EBS only  Up to 10 Gigabit $0.593000 hourly
+  c3-instance-type = "i3.4xlarge"  #122.0 GiB 16 vCPUs  3800 GiB (2 * 1900 GiB NVMe SSD)  Up to 10 Gigabit  $1.376000 hourly
+  clients-instance-type = "r4.large" #R4 High-Memory Large  r4.large  15.25 GiB 2 vCPUs EBS only  Up to 10 Gigabit  $0.148000 hourly
 }
 
 variable "azs" {
@@ -52,7 +60,10 @@ variable "azs" {
   type = "list"
 }
 
-variable "myip" { default = "217.138.75.100/32" }
+variable "myip" { }
+locals {
+  myip-cidr = "${var.myip}/32"
+}
 
 
 resource "aws_security_group" "bastions" {
@@ -65,7 +76,7 @@ resource "aws_security_group" "bastions" {
     from_port = 8
     to_port = 0
     protocol = "icmp"
-    cidr_blocks = ["${var.myip}"]
+    cidr_blocks = ["${local.myip-cidr}"]
   }
 
   ingress {
@@ -73,8 +84,8 @@ resource "aws_security_group" "bastions" {
       to_port = 22
       protocol = "TCP"
       self = true
-      # cidr_blocks = ["${var.myip}"]
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = ["${local.myip-cidr}"]
+      # cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -94,8 +105,7 @@ resource "aws_security_group" "ssh" {
     from_port = 8
     to_port = 0
     protocol = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
-    #cidr_blocks = ["${var.myip}"]
+    cidr_blocks = ["${local.myip-cidr}"]
   }
 
   # ssh
@@ -103,7 +113,7 @@ resource "aws_security_group" "ssh" {
       from_port = 22
       to_port = 22
       protocol = "TCP"
-      cidr_blocks = ["${var.myip}"]
+      cidr_blocks = ["${local.myip-cidr}"]
   }
 
   # from bastion
@@ -149,7 +159,8 @@ resource "aws_security_group" "brokers" {
       to_port = 9092
       protocol = "TCP"
       self = true
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.ssh.id}"] # should an explicit group for clients, ssh covers it
   }
 
   # Allow ping from anywhere
@@ -157,16 +168,8 @@ resource "aws_security_group" "brokers" {
     from_port = 8
     to_port = 0
     protocol = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
-    #cidr_blocks = ["${var.myip}"]
-  }
-
-  # ssh
-  ingress {
-      from_port = 22
-      to_port = 22
-      protocol = "TCP"
-      cidr_blocks = ["${var.myip}"]
+    # cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${local.myip-cidr}"]
   }
 
   # from bastion
@@ -175,15 +178,6 @@ resource "aws_security_group" "brokers" {
       to_port = 22
       protocol = "TCP"
       security_groups = ["${aws_security_group.bastions.id}"] 
-  }
-
-  # ssh from anywhere
-  ingress {
-      from_port = 22
-      to_port = 22
-      protocol = "TCP"
-      self = true
-      cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -203,6 +197,7 @@ resource "aws_security_group" "zookeepers" {
       to_port = 2181
       protocol = "TCP"
       security_groups = ["${aws_security_group.brokers.id}"] 
+      cidr_blocks = ["${local.myip-cidr}"]
   }
 
   ingress {
@@ -227,7 +222,6 @@ resource "aws_security_group" "zookeepers" {
   }
 }
 
-
 resource "aws_security_group" "c3" {
   description = "C3 security group - Managed by Terraform"
   name = "${var.ownershort}-c3"
@@ -237,7 +231,7 @@ resource "aws_security_group" "c3" {
       from_port = 9021
       to_port = 9021
       protocol = "TCP"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = ["${local.myip-cidr}"]
   }
 
   egress {
@@ -258,7 +252,7 @@ resource "aws_security_group" "connect" {
       from_port = 9092
       to_port = 9092
       protocol = "TCP"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = ["${local.myip-cidr}"]
   }
 
   egress {
@@ -307,11 +301,14 @@ resource "aws_instance" "bastion" {
 resource "aws_instance" "brokers" {
   count         = "${var.broker-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${var.instance_type}"
+  instance_type = "${locals.broker-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   # security_groups = ["${var.security_group}"]
   security_groups = ["${aws_security_group.brokers.name}", "${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
+  root_block_device {
+    volume_size = 1000
+  }
   tags {
     Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
     description = "broker nodes - Managed by Terraform"
@@ -332,7 +329,7 @@ resource "aws_instance" "brokers" {
 resource "aws_instance" "zookeeper" {
   count         = "${var.zk-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${var.instance_type}"
+  instance_type = "${locals.zk-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.zookeepers.name}"]
   key_name = "${var.key_name}"
@@ -350,7 +347,7 @@ resource "aws_instance" "zookeeper" {
 resource "aws_instance" "connect-cluster" {
   count         = "${var.connect-count}"
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${var.instance_type}"
+  instance_type = "${locals.connect-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.connect.name}"]
   key_name = "${var.key_name}"
@@ -367,7 +364,7 @@ resource "aws_instance" "connect-cluster" {
 resource "aws_instance" "control-center" {
   count         = 1
   ami           = "${data.aws_ami.ubuntu.id}"
-  instance_type = "${var.instance_type}"
+  instance_type = "${locals.c3-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.c3.name}"]
   key_name = "${var.key_name}"
@@ -391,4 +388,52 @@ output "public_dns" {
 }
 output "bastion_ip" {
   value = ["${aws_instance.bastion.public_dns}"]
+}
+
+
+
+// clients
+variable "producer-count" {
+  default = 2
+}
+variable "client-instance-type" {
+  default = "t2.small"
+}
+resource "aws_instance" "performance-producer" {
+  count         = "${var.producer-count}"
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${locals.client-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}"]
+  key_name = "${var.key_name}"
+  tags {
+    Name = "${var.ownershort}-performance-producer-${count.index}-${element(var.azs, count.index)}"
+    description = "performance-producer - Managed by Terraform"
+    role = "performance-producer"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+  }
+}
+variable "consumer-count" {
+  default = 2
+}
+variable "consumer-instance-type" {
+  default = "t2.small"
+}
+resource "aws_instance" "performance-consumer" {
+  count         = "${var.consumer-count}"
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${locals.client-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}"]
+  key_name = "${var.key_name}"
+  tags {
+    Name = "${var.ownershort}-performance-consumer-${count.index}-${element(var.azs, count.index)}"
+    description = "performance-consumer - Managed by Terraform"
+    role = "performance-consumer"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+  }
 }

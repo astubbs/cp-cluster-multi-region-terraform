@@ -19,8 +19,7 @@ variable "instance_type" {
   default = "t2.medium"
 }
 
-variable "myip" { default = "90.207.16.137/32" }
-
+variable "myip" { }
 
 # resource "aws_instance" "example" {
 #   ami           = "${var.ami}"
@@ -229,29 +228,30 @@ variable "myip" { default = "90.207.16.137/32" }
 #   }
 # }
 
-module "frankfurt-cluster" {
-    source = "./confluent"
-    broker-count = 3
-    zk-count = 3
-    connect-count = 2
-    name = "frankfurt-cluster"
-    region = "eu-central-1"
-    azs = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
-    owner = "${var.owner}"
-    ownershort = "${var.ownershort}"
-    key_name = "antony-frankfurt"
-}
-
-# module "ireland-cluster" {
+# module "frankfurt-cluster" {
 #     source = "./confluent"
-#     broker-count = 3
+#     broker-count = 10
 #     zk-count = 3
 #     connect-count = 2
 #     name = "frankfurt-cluster"
-#     region = "eu-west-1"
-#     azs = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+#     region = "eu-central-1"
+#     azs = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
 #     owner = "${var.owner}"
 #     ownershort = "${var.ownershort}"
-#     key_name = "antony-ireland"
+#     key_name = "antony-frankfurt"
 # }
+
+module "ireland-cluster" {
+    source = "./confluent"
+    broker-count = 5
+    zk-count = 3
+    connect-count = 2
+    name = "frankfurt-cluster"
+    region = "eu-west-1"
+    azs = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+    owner = "${var.owner}"
+    ownershort = "${var.ownershort}"
+    key_name = "antony-ireland"
+    myip = "${var.myip}"
+}
 
