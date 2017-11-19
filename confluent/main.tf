@@ -66,6 +66,11 @@ locals {
   client-instance-type = "t2.medium"
 }
 
+locals {
+  brokers-eu-west-one = "0.0.0.0/0" # need to lock this down
+  brokers-eu-central-one = "0.0.0.0/0" # need to lock this down
+  brokers-all = "0.0.0.0/0" # need to lock this down
+}
 
 variable "azs" {
   description = "Run the EC2 Instances in these Availability Zones"
@@ -208,8 +213,8 @@ resource "aws_security_group" "zookeepers" {
       from_port = 2181
       to_port = 2181
       protocol = "TCP"
-      security_groups = ["${aws_security_group.brokers.id}"] 
-      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.brokers.id}", "${aws_security_group.connect.id}"] 
+      cidr_blocks = ["${local.myip-cidr}", "${local.brokers-all}"]
   }
 
   ingress {
@@ -265,6 +270,7 @@ resource "aws_security_group" "connect" {
       from_port = 8083
       to_port = 8083
       protocol = "TCP"
+      self = true
       cidr_blocks = ["${local.myip-cidr}"]
       security_groups = ["${aws_security_group.c3.id}"] 
   }
@@ -337,6 +343,7 @@ resource "aws_instance" "brokers" {
     # ansible_python_interpreter = "/usr/bin/python3"
     #EntScheduler = "mon,tue,wed,thu,fri;1600;mon,tue,wed,thu;fri;sat;0400;"
     region = "${var.region}"
+    role_region = "brokers-${var.region}"
   }
 }
 
@@ -355,6 +362,7 @@ resource "aws_instance" "zookeeper" {
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
+    role_region = "zookeepers-${var.region}"
   }
 }
 
@@ -372,6 +380,7 @@ resource "aws_instance" "connect-cluster" {
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
+    role_region = "connect-${var.region}"
   }
 }
 
@@ -392,6 +401,7 @@ resource "aws_instance" "control-center" {
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
+    role_region = "c3-${var.region}"
   }
 }
 
@@ -430,6 +440,7 @@ resource "aws_instance" "performance-producer" {
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
+    role_region = "performance-producer-${var.region}"
   }
 }
 variable "consumer-count" {
@@ -452,5 +463,6 @@ resource "aws_instance" "performance-consumer" {
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
+    role_region = "performance-consumer-${var.region}"
   }
 }
