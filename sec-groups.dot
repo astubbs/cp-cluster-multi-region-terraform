@@ -1,0 +1,100 @@
+digraph "AWS Confluent Platform Security Groups" {
+  rankdir = TB;
+  compound = true;
+  graph [nodesep=1.3, ranksep=1.3];
+
+  connect -> broker [lhead=cluster_brokers, ltail=cluster_connect];
+  connect -> source_broker [lhead=cluster_dc2, ltail=cluster_connect];
+  zookeeper -> zookeeper;
+  broker -> zookeeper [lhead=cluster_zookeepers, ltail=cluster_brokers];
+  producer -> broker [lhead=cluster_brokers, ltail=cluster_clients];
+  consumer -> broker [lhead=cluster_brokers, ltail=cluster_clients];
+  consumer -> sr [lhead=cluster_sr, ltail=cluster_clients];
+  producer -> sr [lhead=cluster_sr, ltail=cluster_clients];
+  broker -> broker;
+  c3 -> broker [lhead=cluster_brokers, ltail=cluster_c3];
+  c3 -> connect [lhead=cluster_connect, ltail=cluster_c3];
+  sr -> broker [lhead=cluster_brokers, ltail=cluster_sr];
+
+  laptop1 -> bastion [lhead=cluster_bastion];
+  bastion -> broker [lhead=cluster_dc_internal, ltail=cluster_bastion];
+
+  laptop2 -> c3 [lhead=cluster_c3];
+
+
+  subgraph cluster_web {
+      label="Internet";
+      laptop1 [label="laptop"];
+  }
+
+  subgraph cluster_vpn {
+  label="VPN";
+
+    subgraph cluster_dc1 {
+      label="DC1"
+
+      subgraph cluster_trusted {
+        label="Trusted";
+        laptop2 [label="laptop"];
+      }
+
+      subgraph cluster_bastion {
+        label="SSH Bastion SG\nport-in: 22";
+        bastion [label="bastion-node"];
+      }
+
+      subgraph cluster_dc_internal {
+        label="SSH Internal SG\nport-in: 22"
+
+        subgraph cluster_kerberos {
+          label="Kerberos Server SG\nport-in: 88 (UDP & TCP)";
+          krb [label="kerberos-server"];
+        }
+
+        subgraph cluster_cp {
+          label="Confluent Platform (KRB Clients) SG"
+
+
+          invisible_krb_client [style=invis, padding=1]
+          invisible_krb_client -> krb [ltail=cluster_cp, lhead=cluster_kerberos]
+
+          subgraph cluster_zookeepers {
+          label="Zookeepers SG\nport-in: 2181\n self-only-ports: 2888,3888";
+            zookeeper [label="zookeeper-nodes"];
+          }
+          subgraph cluster_brokers {
+            label="Brokers SG\nport-in: 9092";
+            broker [label="brokers"];
+          }
+          subgraph cluster_connect {
+            label="Connect SG\nport-in: 8083";
+            connect [label="connect-workers"];
+          }
+          subgraph cluster_clients {
+            label="Clients SG\nport-in: null";
+            producer [label="producers"];
+            consumer [label="consumers"];
+          }
+          subgraph cluster_c3 {
+            label="C3 SG\nport-in: 9021";
+            c3;
+          }
+          subgraph cluster_sr {
+            label="Schema Regsitry SG\nport-in: 8081"
+            sr [label="schema-registry"];
+          }
+
+        }
+
+      }
+
+    }
+
+    subgraph cluster_dc2 {
+      label="DC2 Simplified\nSource Replication Kafka Cluster\nport-in: 9092";
+      source_broker  [label="source-brokers"];
+    }
+
+  }
+
+}
