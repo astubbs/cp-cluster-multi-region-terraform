@@ -1,0 +1,74 @@
+digraph "AWS Confluent Platform Security Groups" {
+  rankdir = LR;
+  compound = true;
+
+  subgraph cluster_vpn {
+    label="VPN / Region";
+
+  /* To group AZ's in a row */
+  zookeeper1a -> zookeeper3b [style=invis]
+  zookeeper3b -> zookeeper5c [style=invis]
+
+  // Too much noise, do didn't include any other connections either
+  /*zookeeper1a -> {zookeeper2a,zookeeper3b,zookeeper4b,zookeeper5c}
+  zookeeper2a -> {zookeeper1a,zookeeper3b,zookeeper4b,zookeeper5c}
+  zookeeper3b -> {zookeeper1a,zookeeper2a,zookeeper4b,zookeeper5c}
+  zookeeper4b -> {zookeeper1a,zookeeper2a,zookeeper3b,zookeeper5c}
+  zookeeper5c -> {zookeeper1a,zookeeper2a,zookeeper3b,zookeeper4b}*/
+
+    subgraph cluster_dc1 {
+      label="Zone-A"
+
+      subgraph cluster_zookeepers {
+        label="Zookeepers"
+        zookeeper1a
+        zookeeper2a
+      }
+      subgraph cluster_brokers {
+        label="Brokers"
+        broker1a
+        broker2a
+      }
+      connect_worker_1
+      schema_registry_1
+    }
+
+    subgraph cluster_dc2 {
+      label="Zone-B"
+      rank=2
+
+      subgraph cluster_zookeepers2 {
+      label="Zookeepers"
+        zookeeper3b
+        zookeeper4b
+      }
+      subgraph cluster_brokers2 {
+        label="Brokers"
+        broker3b
+        broker4b
+      }
+      connect_worker_2
+      schema_registry_2
+    }
+
+    subgraph cluster_dc3 {
+      label="Zone-C"
+      rank=3
+
+      subgraph cluster_zookeepers3 {
+      label="Zookeepers"
+        zookeeper5c
+      }
+      subgraph cluster_brokers3 {
+        label="Brokers"
+        broker5c
+        broker6c
+      }
+      connect_worker_3
+      schema_registry_3
+      c3
+    }
+
+  } // end vpn
+
+}
