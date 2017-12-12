@@ -48,9 +48,20 @@ data "aws_ami" "ubuntu" {
 
 # T2 Medium t2.medium 4.0 GiB 2 vCPUs for a 4h 48m burst  EBS only  Low to Moderate $0.050000 hourly
 # T2 Large  t2.large  8.0 GiB 2 vCPUs for a 7h 12m burst  EBS only  Low to Moderate $0.100800 hourly
+# M5 General Purpose Extra Large m5.xlarge 16.0 GiB  4 vCPUs EBS only  High  $0.214000 hourly
 # M5 General Purpose Double Extra Large m5.2xlarge  32.0 GiB  8 vCPUs EBS only  High  $0.428000 hourly
 
-# # moderatly high performance images
+# # strong high performance images
+locals {
+  bastion-instance-type = "m4.xlarge"
+  zk-instance-type = "m4.xlarge"
+  connect-instance-type = "m4.xlarge"
+  broker-instance-type = "m4.xlarge"
+  c3-instance-type = "m4.xlarge"
+  client-instance-type = "m4.xlarge"
+}
+
+# # strong high performance images
 # locals {
 #   bastion-instance-type = "t2.2xlarge"
 #   zk-instance-type = "i3.large" # I3 High I/O Large i3.large  15.25 GiB 2 vCPUs 475 GiB NVMe SSD  Up to 10 Gigabit  $0.172000 hourly
@@ -63,14 +74,14 @@ data "aws_ami" "ubuntu" {
 # }
 
 # testing instance sizes - t2.medium 4.0 GiB 2 vCPUs for a 4h 48m burst  EBS only  Low to Moderate $0.050000 hourly
-locals {
-  bastion-instance-type = "t2.large"
-  zk-instance-type = "t2.large"
-  connect-instance-type = "t2.large"
-  broker-instance-type = "t2.large"
-  c3-instance-type = "t2.large"
-  client-instance-type = "t2.large"
-}
+# locals {
+#   bastion-instance-type = "t2.large"
+#   zk-instance-type = "t2.large"
+#   connect-instance-type = "t2.large"
+#   broker-instance-type = "t2.large"
+#   c3-instance-type = "t2.large"
+#   client-instance-type = "t2.large"
+# }
 
 locals {
   brokers-eu-west-one = "0.0.0.0/0" # need to lock this down
@@ -146,7 +157,7 @@ resource "aws_security_group" "ssh" {
       from_port = 22
       to_port = 22
       protocol = "TCP"
-      security_groups = ["${aws_security_group.bastions.id}"] 
+      security_groups = ["${aws_security_group.bastions.id}"]
   }
 
   # ssh from anywhere
@@ -202,7 +213,7 @@ resource "aws_security_group" "brokers" {
     to_port = 0
     protocol = "icmp"
     self = true
-    security_groups = ["${aws_security_group.bastions.id}"] 
+    security_groups = ["${aws_security_group.bastions.id}"]
     cidr_blocks = ["${local.myip-cidr}"]
   }
 
@@ -230,7 +241,7 @@ resource "aws_security_group" "zookeepers" {
       from_port = 2181
       to_port = 2181
       protocol = "TCP"
-      security_groups = ["${aws_security_group.brokers.id}", "${aws_security_group.connect.id}"] 
+      security_groups = ["${aws_security_group.brokers.id}", "${aws_security_group.connect.id}"]
       cidr_blocks = ["${local.myip-cidr}", "0.0.0.0/0"] # zk needs to be accessible from target cluster in frankfurt
   }
 
@@ -268,6 +279,21 @@ resource "aws_security_group" "c3" {
       cidr_blocks = ["${local.myip-cidr}"]
   }
 
+  # KDC server hack
+  # TODO lock this down
+  ingress {
+      from_port = 88
+      to_port = 88
+      protocol = "TCP"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+      from_port = 88
+      to_port = 88
+      protocol = "UDP"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
       from_port = 0
       to_port = 0
@@ -289,7 +315,7 @@ resource "aws_security_group" "connect" {
       protocol = "TCP"
       self = true
       cidr_blocks = ["${local.myip-cidr}"]
-      security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"] 
+      security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"]
   }
 
   egress {
@@ -332,6 +358,7 @@ resource "aws_instance" "bastion" {
     owner = "${var.owner}"
     sshUser = "ubuntu"
     # ansible_python_interpreter = "/usr/bin/python3"
+    region = "${var.region}"
   }
 }
 
