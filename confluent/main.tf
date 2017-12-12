@@ -59,6 +59,7 @@ locals {
   broker-instance-type = "m4.xlarge"
   c3-instance-type = "m4.xlarge"
   client-instance-type = "m4.xlarge"
+  monitoring-instance-type = "m4.xlarge"
 }
 
 # # strong high performance images
@@ -71,6 +72,7 @@ locals {
 #   broker-instance-type = "r4.2xlarge" # 61.0 GiB  8 vCPUs EBS only  Up to 10 Gigabit $0.593000 hourly
 #   c3-instance-type = "i3.4xlarge"  # 122.0 GiB 16 vCPUs  3800 GiB (2 * 1900 GiB NVMe SSD)  Up to 10 Gigabit  $1.376000 hourly
 #   client-instance-type = "r4.large" # R4 High-Memory Large  r4.large  15.25 GiB 2 vCPUs EBS only  Up to 10 Gigabit  $0.148000 hourly
+#   monitoring-instance-type = "m4.xlarge"
 # }
 
 # testing instance sizes - t2.medium 4.0 GiB 2 vCPUs for a 4h 48m burst  EBS only  Low to Moderate $0.050000 hourly
@@ -81,6 +83,7 @@ locals {
 #   broker-instance-type = "t2.large"
 #   c3-instance-type = "t2.large"
 #   client-instance-type = "t2.large"
+#   monitoring-instance-type = "t2.large"
 # }
 
 locals {
@@ -302,7 +305,6 @@ resource "aws_security_group" "c3" {
   }
 }
 
-
 resource "aws_security_group" "connect" {
   description = "Connect security group - Managed by Terraform"
   name = "${var.ownershort}-connect"
@@ -316,6 +318,60 @@ resource "aws_security_group" "connect" {
       self = true
       cidr_blocks = ["${local.myip-cidr}"]
       security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# should lock down input to this group
+resource "aws_security_group" "monitoring" {
+  description = "Monitoring security group - Managed by Terraform"
+  name = "${var.ownershort}-monitoring"
+
+
+  # Logstash
+  ingress {
+      from_port = 5000
+      to_port = 5000
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.ssh.id}"]
+  }
+
+  # Elastic
+  ingress {
+      from_port = 9200
+      to_port = 9200
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.ssh.id}"]
+  }
+
+  # Elastic
+  ingress {
+      from_port = 9300
+      to_port = 9300
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.ssh.id}"]
+  }
+
+  # kibana
+  ingress {
+      from_port = 5601
+      to_port = 5601
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.ssh.id}"]
   }
 
   egress {
@@ -510,5 +566,24 @@ resource "aws_instance" "performance-consumer" {
     region = "${var.region}"
     role_region = "performance-consumer-${var.region}"
     role_type = "client"
+  }
+}
+
+resource "aws_instance" "monitoring-node" {
+  count         = 1
+  ami           = "${data.aws_ami.ubuntu.id}"
+  instance_type = "${local.monitoring-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.monitoring.name}"]
+  key_name = "${var.key_name}"
+  tags {
+    Name = "${var.ownershort}-monitoring-node-${count.index}-${element(var.azs, count.index)}"
+    description = "monitoring-node - Managed by Terraform"
+    role = "monitoring-node"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+    role_region = "monitoring-node-${var.region}"
+    role_type = "monitoring"
   }
 }
