@@ -6,13 +6,28 @@ variable "ownershort" {}
 variable "zk-count" {
   default = 1
 }
+
 variable "broker-count" {
   default = 1
 }
+
 variable "connect-count" {
-  default = 1
+  default = 2
 }
+
+variable "sr-count" {
+  default = 2
+}
+
+variable "rp-count" {
+  default = 2
+}
+
 variable "c3-count" {}
+
+variable "ksql-count" {
+  default = 2 
+}
 
 provider "aws" {
   region = "${var.region}"
@@ -36,6 +51,12 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
+variable "ami" {
+  # default = "ami-0a0cb6c7bcb2e4c51" # RHEL
+  default = "ami-0ed5844fc553aadd6" # ubuntu london
+  # default = "${data.aws.ami.ubuntu.id}"
+}
+
 # variable "ami" {
 #   # default = "ami-57eae033" # us-west-2 ubuntu
 #   # default = "ami-960316f2"
@@ -52,15 +73,15 @@ data "aws_ami" "ubuntu" {
 # M5 General Purpose Double Extra Large m5.2xlarge  32.0 GiB  8 vCPUs EBS only  High  $0.428000 hourly
 
 # # strong high performance images
-locals {
-  bastion-instance-type = "m4.xlarge"
-  zk-instance-type = "m4.xlarge"
-  connect-instance-type = "m4.xlarge"
-  broker-instance-type = "m4.xlarge"
-  c3-instance-type = "m4.xlarge"
-  client-instance-type = "m4.xlarge"
-  monitoring-instance-type = "m4.xlarge"
-}
+# locals {
+#   bastion-instance-type = "m4.xlarge"
+#   zk-instance-type = "m4.xlarge"
+#   connect-instance-type = "m4.xlarge"
+#   broker-instance-type = "m4.xlarge"
+#   c3-instance-type = "m4.xlarge"
+#   client-instance-type = "m4.xlarge"
+#   monitoring-instance-type = "m4.xlarge"
+# }
 
 # # strong high performance images
 # locals {
@@ -76,15 +97,18 @@ locals {
 # }
 
 # testing instance sizes - t2.medium 4.0 GiB 2 vCPUs for a 4h 48m burst  EBS only  Low to Moderate $0.050000 hourly
-# locals {
-#   bastion-instance-type = "t2.large"
-#   zk-instance-type = "t2.large"
-#   connect-instance-type = "t2.large"
-#   broker-instance-type = "t2.large"
-#   c3-instance-type = "t2.large"
-#   client-instance-type = "t2.large"
-#   monitoring-instance-type = "t2.large"
-# }
+locals {
+  bastion-instance-type = "t2.medium"
+  zk-instance-type = "t2.small"
+  connect-instance-type = "t2.medium"
+  broker-instance-type = "t2.large"
+  c3-instance-type = "t2.large"
+  client-instance-type = "t2.medium"
+  monitoring-instance-type = "t2.medium"
+  sr-instance-type = "t2.small"
+  ksql-instance-type = "t2.medium"
+  rp-instance-type = "t2.small"
+}
 
 locals {
   brokers-eu-west-one = "0.0.0.0/0" # need to lock this down
@@ -122,7 +146,7 @@ resource "aws_security_group" "bastions" {
       protocol = "TCP"
       self = true
       cidr_blocks = ["${local.myip-cidr}"]
-      cidr_blocks = ["0.0.0.0/0"]
+      # cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -328,6 +352,75 @@ resource "aws_security_group" "connect" {
   }
 }
 
+resource "aws_security_group" "rest-proxy" {
+  description = "rest-proxy security group - Managed by Terraform"
+  name = "${var.ownershort}-rest-proxy"
+
+  # connect http interface - only accessable on host, without this
+  # c3 needs access
+  ingress {
+      from_port = 8083
+      to_port = 8083
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "ksql" {
+  description = "KSQL security group - Managed by Terraform"
+  name = "${var.ownershort}-ksql"
+
+  # connect http interface - only accessable on host, without this
+  # c3 needs access
+  ingress {
+      from_port = 8083
+      to_port = 8083
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "schema-registery" {
+  description = "Schema Resgistery group - Managed by Terraform"
+  name = "${var.ownershort}-sr"
+
+  # connect http interface - only accessable on host, without this
+  # c3 needs access
+  ingress {
+      from_port = 8083
+      to_port = 8083
+      protocol = "TCP"
+      self = true
+      cidr_blocks = ["${local.myip-cidr}"]
+      security_groups = ["${aws_security_group.c3.id}", "${aws_security_group.ssh.id}"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 # should lock down input to this group
 resource "aws_security_group" "monitoring" {
   description = "Monitoring security group - Managed by Terraform"
@@ -400,12 +493,12 @@ resource "aws_security_group" "monitoring" {
 
 resource "aws_instance" "bastion" {
   count = 1
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.bastion-instance-type}"
   availability_zone = "${element(var.azs, 0)}"
   security_groups = ["${aws_security_group.bastions.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-bastion-${count.index}-${element(var.azs, count.index)}"
     description = "bastion node - Managed by Terraform"
     nice-name = "bastion-0"
@@ -420,7 +513,7 @@ resource "aws_instance" "bastion" {
 
 resource "aws_instance" "brokers" {
   count         = "${var.broker-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.broker-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   # security_groups = ["${var.security_group}"]
@@ -429,7 +522,7 @@ resource "aws_instance" "brokers" {
   root_block_device {
     volume_size = 1000 # 1TB
   }
-  tags {
+  tags = {
     Name = "${var.ownershort}-broker-${count.index}-${element(var.azs, count.index)}"
     description = "broker nodes - Managed by Terraform"
     nice-name = "kafka-${count.index}"
@@ -449,12 +542,12 @@ resource "aws_instance" "brokers" {
 
 resource "aws_instance" "zookeeper" {
   count         = "${var.zk-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.zk-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.zookeepers.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-zookeeper-${count.index}-${element(var.azs, count.index)}"
     description = "zookeeper nodes - Managed by Terraform"
     role = "zookeeper"
@@ -468,15 +561,15 @@ resource "aws_instance" "zookeeper" {
 
 resource "aws_instance" "connect-cluster" {
   count         = "${var.connect-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.connect-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.connect.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-connect-${count.index}-${element(var.azs, count.index)}"
     description = "Connect nodes - Managed by Terraform"
-    role = "connect"
+    role = "connect-distributed"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
@@ -484,9 +577,62 @@ resource "aws_instance" "connect-cluster" {
   }
 }
 
+resource "aws_instance" "ksql-cluster" {
+  count         = "${var.ksql-count}"
+  ami           = "${var.ami}"
+  instance_type = "${local.ksql-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.ksql.name}"]
+  key_name = "${var.key_name}"
+  tags = {
+    Name = "${var.ownershort}-ksql-${count.index}-${element(var.azs, count.index)}"
+    description = "ksql nodes - Managed by Terraform"
+    role = "ksql"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+    role_region = "ksql-${var.region}"
+  }
+}
+
+resource "aws_instance" "schema-registery-cluster" {
+  count         = "${var.sr-count}"
+  ami           = "${var.ami}"
+  instance_type = "${local.sr-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.schema-registery.name}"]
+  key_name = "${var.key_name}"
+  tags = {
+    Name = "${var.ownershort}-sr-${count.index}-${element(var.azs, count.index)}"
+    description = "schema-registery nodes - Managed by Terraform"
+    role = "schema-registery"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+    role_region = "sr-${var.region}"
+  }
+}
+
+resource "aws_instance" "rest-proxy-cluster" {
+  count         = "${var.rp-count}"
+  ami           = "${var.ami}"
+  instance_type = "${local.rp-instance-type}"
+  availability_zone = "${element(var.azs, count.index)}"
+  security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.rest-proxy.name}"]
+  key_name = "${var.key_name}"
+  tags = {
+    Name = "${var.ownershort}-sr-${count.index}-${element(var.azs, count.index)}"
+    description = "rest-proxy nodes - Managed by Terraform"
+    role = "kafka-proxy"
+    Owner = "${var.owner}"
+    sshUser = "ubuntu"
+    region = "${var.region}"
+    role_region = "rp-${var.region}"
+  }
+}
 resource "aws_instance" "control-center" {
   count         = "${var.c3-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.c3-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.c3.name}"]
@@ -494,10 +640,10 @@ resource "aws_instance" "control-center" {
   root_block_device {
     volume_size = 300 # 300 GB
   }
-  tags {
+  tags = {
     Name = "${var.ownershort}-c3-${count.index}-${element(var.azs, count.index)}"
     description = "Control Center - Managed by Terraform"
-    role = "c3"
+    role = "control-center"
     Owner = "${var.owner}"
     sshUser = "ubuntu"
     region = "${var.region}"
@@ -514,7 +660,7 @@ output "public_dns" {
   value = ["${aws_instance.brokers.*.public_dns}"]
 }
 output "bastion_ip" {
-  value = ["${aws_instance.bastion.public_dns}"]
+  value = ["${aws_instance.bastion[0].public_dns}"]
 }
 
 
@@ -528,12 +674,12 @@ variable "client-instance-type" {
 }
 resource "aws_instance" "performance-producer" {
   count         = "${var.producer-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.client-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-performance-producer-${count.index}-${element(var.azs, count.index)}"
     description = "performance-producer - Managed by Terraform"
     role = "performance-producer"
@@ -552,12 +698,12 @@ variable "consumer-instance-type" {
 }
 resource "aws_instance" "performance-consumer" {
   count         = "${var.consumer-count}"
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.client-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-performance-consumer-${count.index}-${element(var.azs, count.index)}"
     description = "performance-consumer - Managed by Terraform"
     role = "performance-consumer"
@@ -571,12 +717,12 @@ resource "aws_instance" "performance-consumer" {
 
 resource "aws_instance" "monitoring-node" {
   count         = 1
-  ami           = "${data.aws_ami.ubuntu.id}"
+  ami           = "${var.ami}"
   instance_type = "${local.monitoring-instance-type}"
   availability_zone = "${element(var.azs, count.index)}"
   security_groups = ["${aws_security_group.ssh.name}", "${aws_security_group.monitoring.name}"]
   key_name = "${var.key_name}"
-  tags {
+  tags = {
     Name = "${var.ownershort}-monitoring-node-${count.index}-${element(var.azs, count.index)}"
     description = "monitoring-node - Managed by Terraform"
     role = "monitoring-node"
